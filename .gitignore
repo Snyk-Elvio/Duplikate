@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Django
+*.log
+db.sqlite3
+/backend/staticfiles/
+
+# Node / Vite
+node_modules/
+chrome-extension/dist/
+chrome-extension/*.zip
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
