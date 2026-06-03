@@ -23,7 +23,8 @@ services:
     volumes:
       - ./backend:/app
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       # Override the DB host so it points at the compose service
       DATABASE_URL: postgres://duplikate:duplikate@db:5432/duplikate
