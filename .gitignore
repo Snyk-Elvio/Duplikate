@@ -24,6 +24,10 @@ chrome-extension/*.zip
 .env.local
 *.local
 
+# Local/corporate root CAs dropped into the build context (keep the dir, not the certs)
+backend/certs/*
+!backend/certs/.gitkeep
+
 # Editor / OS
 .DS_Store
 .idea/
