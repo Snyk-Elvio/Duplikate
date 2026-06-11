@@ -10,6 +10,9 @@
 import { GET_CONTEXT, type ContextUpdate, type Message } from "../utils/messages";
 import type { CaseContext } from "../utils/resolver";
 import { scrapeCaseContext } from "./scrape";
+import { Spotlight } from "./spotlight";
+
+const spotlight = new Spotlight();
 
 const DEBOUNCE_MS = 100;
 
@@ -27,6 +30,7 @@ function refresh(): void {
 
   if (serialize(next ?? {}) !== serialize(lastContext ?? {})) {
     lastContext = next;
+    spotlight.setContext(next);
     const update: ContextUpdate = { type: "DUPLIKATE_CONTEXT_UPDATE", context: next };
     // Push to the runtime; ignore "no receiver" errors when the popup is closed.
     chrome.runtime.sendMessage(update).catch(() => {});
@@ -77,3 +81,21 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
 
 // Initial scrape.
 refresh();
+
+// Cmd+K / Ctrl+K — toggle the spotlight. Captured at the window level so it
+// intercepts the shortcut before SFDC's own listeners see it.
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (spotlight.isOpen()) {
+        spotlight.close();
+      } else {
+        void spotlight.open();
+      }
+    }
+  },
+  { capture: true },
+);
