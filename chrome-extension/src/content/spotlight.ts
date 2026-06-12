@@ -437,28 +437,70 @@ export class Spotlight {
     }
   }
 
-  private looksLikeHtml(content: string): boolean {
-    return /<[a-z][^>]*>/i.test(content);
+  // Remove Dark Reader browser extension artefacts from HTML.
+  // Dark Reader injects --darkreader-* CSS custom properties and
+  // data-darkreader-* attributes into every DOM element it touches. If a
+  // template was saved or clipboard-read while Dark Reader was active those
+  // artefacts end up in the stored HTML and must be stripped before copying.
+  // Also promotes <span> elements whose inline styles look like code
+  // (light background + distinct text colour) to semantic <code> tags so that
+  // paste targets which key off the CODE element (SFDC, Google Docs) can
+  // apply their own code rendering.
+  private sanitize(html: string): string {
+    const tmp = document.createElement("div");
+    // Set via a detached element so Dark Reader never touches this DOM.
+    tmp.innerHTML = html;
+
+    tmp.querySelectorAll<HTMLElement>("*").forEach((el) => {
+      // Strip data-darkreader-* attributes.
+      Array.from(el.attributes)
+        .filter((a) => a.name.startsWith("data-darkreader"))
+        .forEach((a) => el.removeAttribute(a.name));
+
+      // Strip --darkreader-* custom properties from inline styles.
+      const style = el.getAttribute("style");
+      if (style) {
+        const cleaned = style.replace(/\s*--darkreader-[^;:]+:[^;]+;?/g, "").trim();
+        if (cleaned) el.setAttribute("style", cleaned);
+        else el.removeAttribute("style");
+      }
+
+      // Promote code-styled <span> → <code>.
+      // Templates pasted from SFDC/docs before the Quill editor was added
+      // often store inline code as a <span> with a tinted background and a
+      // distinct text colour instead of a semantic <code> element.
+      if (el.tagName === "SPAN") {
+        const bg = el.style.backgroundColor;
+        const color = el.style.color;
+        const isCodeLike =
+          bg && bg !== "transparent" && bg !== "" &&
+          color && color !== "inherit" && color !== "rgb(24, 24, 24)" && color !== "";
+        if (isCodeLike) {
+          const code = document.createElement("code");
+          code.innerHTML = el.innerHTML;
+          el.replaceWith(code);
+        }
+      }
+    });
+
+    return tmp.innerHTML;
   }
 
-  // Converts HTML to plain text while preserving paragraph/line structure.
+  // Plain-text version: convert block tags to newlines and wrap inline <code>
+  // in backticks so code is visually distinct in plain-text paste targets.
   private htmlToPlainText(html: string): string {
-    const withBreaks = html
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    tmp.querySelectorAll("code").forEach((el) => {
+      el.textContent = "`" + (el.textContent ?? "") + "`";
+    });
+    const withBreaks = tmp.innerHTML
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/p>|<\/div>|<\/li>|<\/h[1-6]>|<\/tr>/gi, "\n")
       .replace(/<li[^>]*>/gi, "• ");
-    const tmp = document.createElement("div");
-    tmp.innerHTML = withBreaks;
-    return (tmp.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
-  }
-
-  // Converts plain text to minimal HTML, preserving newlines as <br> tags.
-  private plainTextToHtml(text: string): string {
-    const escaped = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return escaped.replace(/\n/g, "<br>");
+    const tmp2 = document.createElement("div");
+    tmp2.innerHTML = withBreaks;
+    return (tmp2.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
   }
 
   private async select(idx: number): Promise<void> {
@@ -466,11 +508,10 @@ export class Spotlight {
     if (!tpl) return;
 
     const resolved = resolve(tpl.html, this.context ?? {});
-    // Templates may be stored as plain text (typed in Django admin) or as HTML
-    // (from a future rich-text editor). Handle both so newlines are always preserved.
-    const isHtml = this.looksLikeHtml(resolved);
-    const plain = isHtml ? this.htmlToPlainText(resolved) : resolved.trim();
-    const richHtml = isHtml ? resolved : this.plainTextToHtml(resolved);
+    const cleaned = this.sanitize(resolved);
+    const isHtml = /<[a-z][^>]*>/i.test(cleaned);
+    const richHtml = isHtml ? cleaned : cleaned.replace(/\n/g, "<br>");
+    const plain = isHtml ? this.htmlToPlainText(cleaned) : cleaned.trim();
 
     try {
       await navigator.clipboard.write([
