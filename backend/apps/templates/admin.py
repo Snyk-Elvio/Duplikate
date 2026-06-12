@@ -1,10 +1,20 @@
+from django import forms
 from django.contrib import admin
 
 from .models import Template
+from .widgets import QuillWidget
+
+
+class TemplateAdminForm(forms.ModelForm):
+    class Meta:
+        model = Template
+        fields = "__all__"
+        widgets = {"html": QuillWidget()}
 
 
 @admin.register(Template)
 class TemplateAdmin(admin.ModelAdmin):
+    form = TemplateAdminForm
     list_display = ["name", "is_published", "created_by", "updated_at"]
     list_filter = ["is_published"]
     search_fields = ["name", "html"]
