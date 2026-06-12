@@ -71,12 +71,12 @@ function firstNonEmpty(strategies: Array<() => string | undefined>): string | un
 
 /** Lightning record fields expose `data-target-selection-name="sfdc:RecordField.<Field>"`. */
 function byFieldName(doc: Document, field: string): string | undefined {
-  const candidates = doc.querySelectorAll(
-    `[data-target-selection-name$="${field}"], [data-target-selection-name$="${field}"] *`,
+  const candidates = doc.querySelectorAll<Element>(
+    `[data-target-selection-name$="${field}"]`,
   );
-  for (const el of candidates) {
-    if (!isHiddenContent(el)) {
-      return text(el.closest("[data-target-selection-name]") ?? el);
+  for (const container of candidates) {
+    if (!isHiddenContent(container)) {
+      return fieldValue(container);
     }
   }
   return undefined;
@@ -89,12 +89,49 @@ function byOutputLabel(doc: Document, label: string): string | undefined {
     if (isHiddenContent(item)) continue;
     const labelEl = item.querySelector(".slds-form-element__label, .test-id__field-label");
     if (labelEl && text(labelEl).toLowerCase() === label.toLowerCase()) {
-      const valueEl =
-        item.querySelector(".slds-form-element__control, .test-id__field-value") ?? item;
-      const value = text(valueEl);
-      if (value && value.toLowerCase() !== label.toLowerCase()) return value;
+      return fieldValue(item);
     }
   }
+  return undefined;
+}
+
+/**
+ * Extract the display value from a SFDC field container without picking up the
+ * label text or action buttons (Edit, Delete, etc.).
+ *
+ * Strategy order:
+ * 1. Lookup fields render the value as an <a> link inside the control area.
+ * 2. Text/formula fields use lightning-formatted-text or lightning-formatted-name.
+ * 3. Fallback to the raw control/value container text.
+ */
+function fieldValue(container: Element): string | undefined {
+  const ctrl = container.querySelector(".slds-form-element__control, .test-id__field-value");
+
+  // 1. Lookup fields (Contact, Account, etc.) — value is a link
+  const link = ctrl?.querySelector<HTMLElement>("a[href]");
+  if (link) {
+    const t = text(link);
+    if (t) return t;
+  }
+
+  // 2. Lightning formatted components — value is isolated in its own element
+  const formatted = ctrl?.querySelector<HTMLElement>(
+    "lightning-formatted-text, lightning-formatted-name, " +
+      "lightning-formatted-lookup, .slds-truncate",
+  );
+  if (formatted) {
+    const t = text(formatted);
+    if (t) return t;
+  }
+
+  // 3. Raw control text — skip if it looks like label + value concatenated
+  if (ctrl) {
+    const t = text(ctrl);
+    const labelEl = container.querySelector(".slds-form-element__label, .test-id__field-label");
+    const labelText = labelEl ? text(labelEl).toLowerCase() : "";
+    if (t && !t.toLowerCase().startsWith(labelText)) return t;
+  }
+
   return undefined;
 }
 
