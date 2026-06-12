@@ -437,19 +437,45 @@ export class Spotlight {
     }
   }
 
+  private looksLikeHtml(content: string): boolean {
+    return /<[a-z][^>]*>/i.test(content);
+  }
+
+  // Converts HTML to plain text while preserving paragraph/line structure.
+  private htmlToPlainText(html: string): string {
+    const withBreaks = html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>|<\/div>|<\/li>|<\/h[1-6]>|<\/tr>/gi, "\n")
+      .replace(/<li[^>]*>/gi, "• ");
+    const tmp = document.createElement("div");
+    tmp.innerHTML = withBreaks;
+    return (tmp.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  // Converts plain text to minimal HTML, preserving newlines as <br> tags.
+  private plainTextToHtml(text: string): string {
+    const escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return escaped.replace(/\n/g, "<br>");
+  }
+
   private async select(idx: number): Promise<void> {
     const tpl = this.filtered[idx];
     if (!tpl) return;
 
-    const resolvedHtml = resolve(tpl.html, this.context ?? {});
-    const tmp = document.createElement("div");
-    tmp.innerHTML = resolvedHtml;
-    const plain = tmp.textContent ?? "";
+    const resolved = resolve(tpl.html, this.context ?? {});
+    // Templates may be stored as plain text (typed in Django admin) or as HTML
+    // (from a future rich-text editor). Handle both so newlines are always preserved.
+    const isHtml = this.looksLikeHtml(resolved);
+    const plain = isHtml ? this.htmlToPlainText(resolved) : resolved.trim();
+    const richHtml = isHtml ? resolved : this.plainTextToHtml(resolved);
 
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
-          "text/html": new Blob([resolvedHtml], { type: "text/html" }),
+          "text/html": new Blob([richHtml], { type: "text/html" }),
           "text/plain": new Blob([plain], { type: "text/plain" }),
         }),
       ]);
