@@ -141,12 +141,37 @@ const STYLES = `
     border-radius: 3px;
     padding: 1px 5px;
   }
+
+  .context-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-bottom: 1px solid #ebebeb;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .context-bar.has-context { background: #f0f7ff; color: #0a5c9e; }
+  .context-bar.no-context  { background: #fff9f0; color: #8a5300; }
+
+  .ctx-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .has-context .ctx-dot { background: #0070d2; }
+  .no-context  .ctx-dot { background: #dd7a01; }
 `;
 
 export class Spotlight {
   private host: HTMLDivElement | null = null;
   private inputEl: HTMLInputElement | null = null;
   private resultsEl: HTMLDivElement | null = null;
+  private contextBarEl: HTMLDivElement | null = null;
+  private ctxTextEl: HTMLSpanElement | null = null;
   private templates: Template[] = [];
   private filtered: Template[] = [];
   private activeIdx = 0;
@@ -155,6 +180,7 @@ export class Spotlight {
 
   setContext(ctx: CaseContext | null): void {
     this.context = ctx;
+    this.updateContextBar();
   }
 
   isOpen(): boolean {
@@ -177,6 +203,8 @@ export class Spotlight {
     this.host = null;
     this.inputEl = null;
     this.resultsEl = null;
+    this.contextBarEl = null;
+    this.ctxTextEl = null;
   }
 
   private mount(): void {
@@ -222,6 +250,13 @@ export class Spotlight {
 
     searchRow.append(iconEl, inputEl, escHint);
 
+    // Context bar — shows the scraped case / customer from the active SFDC tab.
+    const contextBar = document.createElement("div");
+    const ctxDot = document.createElement("span");
+    ctxDot.className = "ctx-dot";
+    const ctxText = document.createElement("span");
+    contextBar.append(ctxDot, ctxText);
+
     // Results container
     const resultsEl = document.createElement("div");
     resultsEl.className = "results";
@@ -236,16 +271,36 @@ export class Spotlight {
       <span class="hint"><kbd>↵</kbd> copy &amp; close</span>
     `;
 
-    panel.append(searchRow, resultsEl, footer);
+    panel.append(searchRow, contextBar, resultsEl, footer);
     backdrop.appendChild(panel);
     shadow.append(styleEl, backdrop);
 
     this.host = host;
     this.inputEl = inputEl;
     this.resultsEl = resultsEl;
+    this.contextBarEl = contextBar;
+    this.ctxTextEl = ctxText;
     this.activeIdx = 0;
 
     document.body.appendChild(host);
+    this.updateContextBar();
+  }
+
+  private updateContextBar(): void {
+    if (!this.contextBarEl || !this.ctxTextEl) return;
+    const ctx = this.context;
+    const hasCtx = Boolean(ctx?.caseNumber || ctx?.customerFullName);
+
+    this.contextBarEl.className = `context-bar ${hasCtx ? "has-context" : "no-context"}`;
+
+    if (hasCtx) {
+      const parts: string[] = [];
+      if (ctx!.caseNumber) parts.push(`Case #${ctx!.caseNumber}`);
+      if (ctx!.customerFullName) parts.push(ctx!.customerFullName);
+      this.ctxTextEl.textContent = parts.join(" · ");
+    } else {
+      this.ctxTextEl.textContent = "No case context — placeholders will stay unresolved";
+    }
   }
 
   private async loadTemplates(): Promise<void> {

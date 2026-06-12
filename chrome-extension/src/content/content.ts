@@ -15,6 +15,9 @@ import { Spotlight } from "./spotlight";
 const spotlight = new Spotlight();
 
 const DEBOUNCE_MS = 100;
+// Lightning's SPA rendering is async — retry scraping at these intervals after
+// a URL change so we catch the new case DOM once it finishes painting.
+const NAV_RETRY_DELAYS_MS = [150, 400, 900] as const;
 
 let lastContext: CaseContext | null = null;
 let lastUrl = location.href;
@@ -37,6 +40,16 @@ function refresh(): void {
   }
 }
 
+// Immediately broadcast null context. Called on every URL change so consumers
+// never see a stale previous-case context while the new page is loading.
+function clearContext(): void {
+  if (lastContext === null) return;
+  lastContext = null;
+  spotlight.setContext(null);
+  const update: ContextUpdate = { type: "DUPLIKATE_CONTEXT_UPDATE", context: null };
+  chrome.runtime.sendMessage(update).catch(() => {});
+}
+
 function debounce<F extends (...args: never[]) => void>(fn: F, ms: number): F {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return ((...args: never[]) => {
@@ -47,15 +60,29 @@ function debounce<F extends (...args: never[]) => void>(fn: F, ms: number): F {
 
 const debouncedRefresh = debounce(refresh, DEBOUNCE_MS);
 
-// (a) DOM mutations.
+// (a) DOM mutations — childList for node changes; attribute watch for Lightning's
+// workspace-tab show/hide transitions (aria-hidden, slds-hide class, hidden attr).
 const observer = new MutationObserver(() => debouncedRefresh());
-observer.observe(document.documentElement, { childList: true, subtree: true });
+observer.observe(document.documentElement, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ["aria-hidden", "class", "hidden"],
+});
 
 // (b) SPA URL changes (Lightning uses pushState/replaceState + hash routing).
 function onUrlMaybeChanged(): void {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
+    // Immediately invalidate the previous context so consumers see null at once
+    // instead of the last case's data while the new page is still rendering.
+    clearContext();
+    // Retry scraping across several delays — Lightning's DOM is often not ready
+    // by the time pushState fires, and aria-hidden toggling may not arrive either.
     debouncedRefresh();
+    for (const ms of NAV_RETRY_DELAYS_MS) {
+      setTimeout(refresh, ms);
+    }
   }
 }
 for (const evt of ["popstate", "hashchange"] as const) {
@@ -82,6 +109,12 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
 // Initial scrape.
 refresh();
 
+// Polling fallback — SFDC Service Console can switch workspace tabs without
+// firing pushState, popstate, or DOM mutations we can observe. Polling at
+// 500 ms guarantees lastContext is never more than half a second stale.
+// refresh() is idempotent: it only broadcasts when the context actually changes.
+setInterval(refresh, 500);
+
 // Cmd+K / Ctrl+K — toggle the spotlight. Captured at the window level so it
 // intercepts the shortcut before SFDC's own listeners see it.
 window.addEventListener(
@@ -93,6 +126,9 @@ window.addEventListener(
       if (spotlight.isOpen()) {
         spotlight.close();
       } else {
+        // Pull context fresh at open time — more reliable than waiting for a push.
+        const ctx = scrapeCaseContext();
+        spotlight.setContext(Boolean(ctx.caseNumber || ctx.customerFullName) ? ctx : null);
         void spotlight.open();
       }
     }
