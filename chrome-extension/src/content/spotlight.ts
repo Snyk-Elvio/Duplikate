@@ -1,6 +1,7 @@
 import { getToken, type Template } from "../utils/api";
 import { FETCH_TEMPLATES, type FetchTemplatesResponse } from "../utils/messages";
 import { resolve, type CaseContext } from "../utils/resolver";
+import { autoFillComment } from "./autoFill";
 
 const STYLES = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -527,6 +528,7 @@ export class Spotlight {
     const name = tpl.name;
     this.close();
     this.toast(`Copied "${name}"`);
+    void autoFillComment(richHtml, plain);
   }
 
   private toast(msg: string): void {
