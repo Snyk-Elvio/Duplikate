@@ -180,7 +180,7 @@ function TemplatesView({ user, onLogout }: { user: User; onLogout: () => void })
             <li key={t.id} className="dk-item">
               <div className="dk-item-head">
                 <span className="dk-item-name">{t.name}</span>
-                {!t.is_published && <span className="dk-tag">draft</span>}
+                <span className="dk-tag">{t.visibility ?? "global"}</span>
               </div>
               <div
                 className="dk-preview"

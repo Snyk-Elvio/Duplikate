@@ -1,17 +1,35 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from .models import Template
 
-class IsManagerOrReadOnly(BasePermission):
+
+class TemplatePermission(BasePermission):
     """
-    Read access for any authenticated user; write access for managers only.
-
-    Engineers (is_manager=False) can list/retrieve templates but get 403 on
-    create/update/delete.
+    Read/write rules per visibility level:
+    - global:   any authenticated user can read; is_staff only can write
+    - shared:   creator + explicitly granted users can read; creator only can write
+    - personal: creator only can read/write
     """
 
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
-            return False
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
         if request.method in SAFE_METHODS:
-            return True
-        return bool(request.user.is_manager)
+            if obj.visibility == Template.GLOBAL:
+                return True
+            if obj.visibility == Template.PERSONAL:
+                return obj.created_by_id == user.pk
+            # shared
+            if obj.created_by_id == user.pk:
+                return True
+            return obj.visibility_shares.filter(shared_with=user).exists()
+        else:
+            if obj.visibility == Template.GLOBAL:
+                return user.is_staff
+            return obj.created_by_id == user.pk
+
+
+# Keep the old name as an alias so existing imports don't break until cleaned up.
+IsManagerOrReadOnly = TemplatePermission

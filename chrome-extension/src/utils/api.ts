@@ -19,7 +19,7 @@ export interface Template {
   id: number;
   name: string;
   html: string;
-  is_published: boolean;
+  visibility: "personal" | "shared" | "global";
 }
 
 export class AuthError extends Error {}

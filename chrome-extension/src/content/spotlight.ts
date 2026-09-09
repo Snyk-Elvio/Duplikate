@@ -103,11 +103,31 @@ const STYLES = `
 
   .item.active { background: #eef3ff; }
 
+  .item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .item-name {
     font-weight: 600;
     font-size: 14px;
     color: #111;
   }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .badge-personal { background: #f0f0f0; color: #666; }
+  .badge-shared   { background: #fff3e0; color: #e65100; }
+  .badge-global   { background: #e8f5e9; color: #2e7d32; }
 
   .item-preview {
     font-size: 12px;
@@ -380,15 +400,24 @@ export class Spotlight {
       const item = document.createElement("div");
       item.className = "item" + (i === this.activeIdx ? " active" : "");
 
+      const headerEl = document.createElement("div");
+      headerEl.className = "item-header";
+
       const nameEl = document.createElement("div");
       nameEl.className = "item-name";
       nameEl.textContent = tpl.name;
+
+      const badge = document.createElement("span");
+      badge.className = `badge badge-${tpl.visibility ?? "global"}`;
+      badge.textContent = tpl.visibility ?? "global";
+
+      headerEl.append(nameEl, badge);
 
       const previewEl = document.createElement("div");
       previewEl.className = "item-preview";
       previewEl.textContent = this.plainText(tpl.html).slice(0, 140);
 
-      item.append(nameEl, previewEl);
+      item.append(headerEl, previewEl);
 
       const idx = i;
       item.addEventListener("click", () => void this.select(idx));
